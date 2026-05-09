@@ -5,9 +5,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameFeaturesSubsystem.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
-#include "GameFeaturePluginOperationResult.h"
 #include "GameFeatureBlueprintHelpers.generated.h"
 
 // Delegate for async operation results
@@ -44,16 +44,17 @@ public:
 	/** The URL that will be requested. */
 	UPROPERTY(BlueprintReadOnly)
 	FString PluginURL;
+	
+	UPROPERTY(BlueprintReadOnly)
+	UGameFeaturesSubsystem* GameFeaturesSubsystem;
 
 	/** Create and start an async request to load+activate the plugin by URL. */
 	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true"), Category = "Game Features")
-	static UAsyncLoadAndActivateGameFeature* LoadAndActivateGameFeatureByURL(const FString& InPluginURL);
+	static UAsyncLoadAndActivateGameFeature* LoadAndActivateGameFeatureByURL(const FString& InPluginURL, UGameFeaturesSubsystem* GFSubsystem);
 
 	// UBlueprintAsyncActionBase
 	virtual void Activate() override;
-
-private:
-	void HandleResult(const UE::GameFeatures::FResult& Result);
+	
 };
 
 /**
@@ -74,14 +75,15 @@ public:
 	/** The URL that will be deactivated and unloaded. */
 	UPROPERTY(BlueprintReadOnly)
 	FString PluginURL;
+	
+	UPROPERTY(BlueprintReadOnly)
+	UGameFeaturesSubsystem* GameFeaturesSubsystem;
 
 	/** Create and start an async request to deactivate and unload the plugin by URL. */
 	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true"), Category = "Game Features")
-	static UAsyncDeactivateGameFeature* DeactivateAndUnloadGameFeatureByURL(const FString& InPluginURL);
+	static UAsyncDeactivateGameFeature* UnloadGameFeatureByURL(const FString& InPluginURL, UGameFeaturesSubsystem* GFSubsystem);
 
 	// UBlueprintAsyncActionBase
 	virtual void Activate() override;
-
-private:
-	void HandleResult(const UE::GameFeatures::FResult& Result);
+	
 };

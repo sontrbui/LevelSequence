@@ -3,34 +3,10 @@
 
 #include "GameFeatureBlueprintHelpers.h"
 #include "GameFeaturesSubsystem.h"
+#include "GameFeaturePluginOperationResult.h"
 #include "Logging/LogMacros.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGameFeatureLibrary, Log, All);
-
-namespace
-{
-	// Detection helper to check if FResult has HasError method across engine versions
-	template <typename T>
-	static auto Has_HasError(int) -> decltype(std::declval<T>().HasError(), std::true_type());
-
-	template <typename T>
-	static auto Has_HasError(...) -> std::false_type;
-
-	static bool TryResultSuccess(const UE::GameFeatures::FResult& Result)
-	{
-		using R = UE::GameFeatures::FResult;
-
-		if constexpr (decltype(Has_HasError<R>(0))::value)
-		{
-			return !Result.HasError();
-		}
-		else
-		{
-			// Unknown API - conservatively assume success
-			return true;
-		}
-	}
-}
 
 //////////////////////////////////////////////////////////////////////
 // UGameFeatureHelpers - Synchronous Helper Functions
@@ -61,10 +37,11 @@ bool UGameFeatureHelpers::GetPluginURLByName(const FString& PluginName, FString&
 // UAsyncLoadAndActivateGameFeature - Asynchronous Load/Activate
 //////////////////////////////////////////////////////////////////////
 
-UAsyncLoadAndActivateGameFeature* UAsyncLoadAndActivateGameFeature::LoadAndActivateGameFeatureByURL(const FString& InPluginURL)
+UAsyncLoadAndActivateGameFeature* UAsyncLoadAndActivateGameFeature::LoadAndActivateGameFeatureByURL(const FString& InPluginURL, UGameFeaturesSubsystem* GFSubsystem)
 {
 	UAsyncLoadAndActivateGameFeature* Node = NewObject<UAsyncLoadAndActivateGameFeature>();
 	Node->PluginURL = InPluginURL;
+	Node->GameFeaturesSubsystem = GFSubsystem;
 	// Returned node will have Activate called by Blueprint VM
 	return Node;
 }
@@ -80,26 +57,23 @@ void UAsyncLoadAndActivateGameFeature::Activate()
 
 	UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: Requesting LoadAndActivateGameFeature for URL: %s"), *PluginURL);
 
-	UGameFeaturesSubsystem::Get().LoadAndActivateGameFeaturePlugin(PluginURL, FGameFeaturePluginLoadComplete::CreateUObject(this, &ThisClass::HandleResult));
-}
-
-void UAsyncLoadAndActivateGameFeature::HandleResult(const UE::GameFeatures::FResult& Result)
-{
-	const bool bSuccess = TryResultSuccess(Result);
-	UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: LoadAndActivateGameFeature completed for: %s (Success=%d)"), *PluginURL, (int)bSuccess);
-	OnCompleted.Broadcast(bSuccess);
-
-	// Let Blueprint VM clean up the node when appropriate.
+	GameFeaturesSubsystem->LoadAndActivateGameFeaturePlugin(PluginURL, FGameFeaturePluginLoadComplete::CreateWeakLambda(this, [this](const UE::GameFeatures::FResult& Result)	
+	{
+		const bool bSuccess = Result.HasValue();
+		UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: LoadAndActivateGameFeature completed for: %s (Success=%d)"), *PluginURL, (int)bSuccess);
+		OnCompleted.Broadcast(bSuccess);
+	}));
 }
 
 //////////////////////////////////////////////////////////////////////
 // UAsyncDeactivateGameFeature - Asynchronous Deactivate & Unload
 //////////////////////////////////////////////////////////////////////
 
-UAsyncDeactivateGameFeature* UAsyncDeactivateGameFeature::DeactivateAndUnloadGameFeatureByURL(const FString& InPluginURL)
+UAsyncDeactivateGameFeature* UAsyncDeactivateGameFeature::UnloadGameFeatureByURL(const FString& InPluginURL, UGameFeaturesSubsystem* GFSubsystem)
 {
 	UAsyncDeactivateGameFeature* Node = NewObject<UAsyncDeactivateGameFeature>();
 	Node->PluginURL = InPluginURL;
+	Node->GameFeaturesSubsystem = GFSubsystem;
 	// Returned node will have Activate called by Blueprint VM
 	return Node;
 }
@@ -116,14 +90,11 @@ void UAsyncDeactivateGameFeature::Activate()
 	UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: Requesting DeactivateGameFeature for URL: %s"), *PluginURL);
 
 	// Use UnloadGameFeaturePlugin to properly trigger cleanup in Game Feature Actions
-	UGameFeaturesSubsystem::Get().UnloadGameFeaturePlugin(PluginURL, FGameFeaturePluginChangeStateComplete::CreateUObject(this, &ThisClass::HandleResult));
+	GameFeaturesSubsystem->UnloadGameFeaturePlugin(PluginURL, FGameFeaturePluginChangeStateComplete::CreateWeakLambda(this, [this](const UE::GameFeatures::FResult& Result)	
+	{
+		const bool bSuccess = Result.HasValue();
+		UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: DeactivateGameFeature completed for: %s (Success=%d)"), *PluginURL, (int)bSuccess);
+		OnCompleted.Broadcast(bSuccess);
+	}), true);
 }
 
-void UAsyncDeactivateGameFeature::HandleResult(const UE::GameFeatures::FResult& Result)
-{
-	const bool bSuccess = TryResultSuccess(Result);
-	UE_LOG(LogGameFeatureLibrary, Log, TEXT("Async: DeactivateGameFeature completed for: %s (Success=%d)"), *PluginURL, (int)bSuccess);
-	OnCompleted.Broadcast(bSuccess);
-
-	// Let Blueprint VM clean up the node when appropriate.
-}

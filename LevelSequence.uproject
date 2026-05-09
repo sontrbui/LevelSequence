@@ -40,6 +40,15 @@
 		{
 			"Name": "AddShootingMap",
 			"Enabled": true
+		},
+		{
+			"Name": "UnrealClaude",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Linux",
+				"Mac"
+			]
 		}
 	]
 }
